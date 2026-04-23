@@ -394,8 +394,6 @@ fn cmd_agents(io: &mut PluginIO, base_url: &str, json_output: bool) {
 }
 
 fn cmd_sessions(io: &mut PluginIO, base_url: &str, json_output: bool) {
-    // The sessions endpoint returns all sessions (can be huge), so pipe through
-    // python3 to filter only running sessions and project minimal fields.
     let cmd = format!(
         "curl -s '{base_url}/api/sessions' | python3 -c \"\
 import sys,json; \
@@ -432,10 +430,10 @@ json.dump(running,sys.stdout)\""
                 }
                 io.output("\n");
             } else {
-                io.output(&format!("  Response: {raw}\n"));
+                io.output("  Unexpected response format.\n");
             }
         }
-        Err(_) => io.output(&format!("  Raw: {raw}\n")),
+        Err(_) => io.output("  Failed to parse sessions.\n"),
     }
 }
 
@@ -444,7 +442,6 @@ fn cmd_work(io: &mut PluginIO, base_url: &str, args: &[String], flags: &Flags) {
 
     match subcmd {
         "list" => {
-            // Work tasks can be large — project only needed fields
             let cmd = format!(
                 "curl -s '{base_url}/api/work-tasks' | python3 -c \"\
 import sys,json; \
@@ -483,10 +480,10 @@ json.dump(out,sys.stdout)\""
                         }
                         io.output("\n");
                     } else {
-                        io.output(&format!("  Response: {raw}\n"));
+                        io.output("  Unexpected response format.\n");
                     }
                 }
-                Err(_) => io.output(&format!("  Raw: {raw}\n")),
+                Err(_) => io.output("  Failed to parse work tasks.\n"),
             }
         }
         "create" => {
@@ -682,7 +679,6 @@ fn cmd_chat(io: &mut PluginIO, base_url: &str, args: &[String], json_output: boo
 }
 
 fn cmd_config(io: &mut PluginIO, args: &[String]) {
-    // Non-interactive: fledge corvid-agent config --url http://localhost:3000
     let mut url: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
