@@ -205,9 +205,9 @@ impl PluginIO {
     fn curl(&mut self, url: &str) -> String {
         let resp = self.request(&OutboundMessage::Exec {
             id: next_id(),
-            command: format!("curl -s {url}"),
+            command: format!("curl -s '{url}'"),
             cwd: None,
-            timeout: Some(10),
+            timeout: Some(30),
         });
         resp.value
             .as_ref()
@@ -249,7 +249,7 @@ fn get_base_url(io: &mut PluginIO) -> String {
         .as_ref()
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .unwrap_or("http://localhost:3578")
+        .unwrap_or("http://localhost:3000")
         .to_string()
 }
 
@@ -332,7 +332,25 @@ fn cmd_agents(io: &mut PluginIO, base_url: &str) {
 }
 
 fn cmd_sessions(io: &mut PluginIO, base_url: &str) {
-    let raw = io.curl(&format!("{base_url}/api/sessions"));
+    let resp = io.request(&OutboundMessage::Exec {
+        id: next_id(),
+        command: format!(
+            "curl -s '{base_url}/api/sessions' | python3 -c \"\
+import sys,json; data=json.load(sys.stdin); \
+running=[s for s in data if s.get('status')=='running']; \
+print(json.dumps(running[:20]))\""
+        ),
+        cwd: None,
+        timeout: Some(60),
+    });
+    let raw = resp.value
+        .as_ref()
+        .and_then(|v| v.get("stdout"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
     if raw.is_empty() {
         io.output("  Server not reachable.\n");
         return;
@@ -340,33 +358,22 @@ fn cmd_sessions(io: &mut PluginIO, base_url: &str) {
 
     match serde_json::from_str::<serde_json::Value>(&raw) {
         Ok(data) => {
-            let sessions = data.as_array().or_else(|| {
-                data.get("sessions").and_then(|v| v.as_array())
-            });
-
-            if let Some(sessions) = sessions {
-                let active: Vec<_> = sessions.iter().filter(|s| {
-                    s.get("status").and_then(|v| v.as_str()) == Some("active")
-                }).collect();
-
-                io.output(&format!(
-                    "\n  Sessions: {} total, {} active\n\n",
-                    sessions.len(),
-                    active.len()
-                ));
-
-                for s in active.iter().take(10) {
+            if let Some(sessions) = data.as_array() {
+                io.output(&format!("\n  Running Sessions ({})\n\n", sessions.len()));
+                for s in sessions.iter().take(10) {
                     let id = s.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                     let short_id = &id[..8.min(id.len())];
-                    let agent = s.get("agentName").and_then(|v| v.as_str()).unwrap_or("?");
-                    io.output(&format!("  {short_id}  {agent}\n"));
+                    let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                    let source = s.get("source").and_then(|v| v.as_str()).unwrap_or("?");
+                    let cost = s.get("totalCostUsd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    io.output(&format!("  {short_id}  [{source}]  {name}  (${cost:.2})\n"));
                 }
                 io.output("\n");
             } else {
-                io.output(&format!("  Response: {raw}\n"));
+                io.output("  Unexpected response format.\n");
             }
         }
-        Err(_) => io.output(&format!("  Raw: {raw}\n")),
+        Err(_) => io.output("  Failed to parse sessions.\n"),
     }
 }
 
@@ -375,19 +382,35 @@ fn cmd_work(io: &mut PluginIO, base_url: &str, args: &[String]) {
 
     match subcmd {
         "list" => {
-            let raw = io.curl(&format!("{base_url}/api/work-tasks"));
+            let resp = io.request(&OutboundMessage::Exec {
+                id: next_id(),
+                command: format!(
+                    "curl -s '{base_url}/api/work-tasks' | python3 -c \"\
+import sys,json; data=json.load(sys.stdin); \
+recent=sorted(data,key=lambda t:t.get('queuedAt') or '',reverse=True)[:20]; \
+out=[dict(id=t.get('id','?'),status=t.get('status','?'),description=(t.get('description') or '')[:80],prUrl=t.get('prUrl')) for t in recent]; \
+print(json.dumps(out))\""
+                ),
+                cwd: None,
+                timeout: Some(60),
+            });
+            let raw = resp.value
+                .as_ref()
+                .and_then(|v| v.get("stdout"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+
             if raw.is_empty() {
                 io.output("  Server not reachable.\n");
                 return;
             }
             match serde_json::from_str::<serde_json::Value>(&raw) {
                 Ok(data) => {
-                    let tasks = data.as_array().or_else(|| {
-                        data.get("tasks").and_then(|v| v.as_array())
-                    });
-                    if let Some(tasks) = tasks {
-                        io.output(&format!("\n  Work Tasks ({} total)\n\n", tasks.len()));
-                        for t in tasks.iter().take(20) {
+                    if let Some(tasks) = data.as_array() {
+                        io.output(&format!("\n  Work Tasks (showing latest {})\n\n", tasks.len()));
+                        for t in tasks {
                             let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                             let short = &id[..8.min(id.len())];
                             let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("?");
@@ -397,10 +420,10 @@ fn cmd_work(io: &mut PluginIO, base_url: &str, args: &[String]) {
                         }
                         io.output("\n");
                     } else {
-                        io.output(&format!("  Response: {raw}\n"));
+                        io.output("  Unexpected response format.\n");
                     }
                 }
-                Err(_) => io.output(&format!("  Raw: {raw}\n")),
+                Err(_) => io.output("  Failed to parse work tasks.\n"),
             }
         }
         "create" => {
@@ -477,25 +500,23 @@ fn cmd_work(io: &mut PluginIO, base_url: &str, args: &[String]) {
 
 fn cmd_chat(io: &mut PluginIO, base_url: &str, args: &[String]) {
     if args.is_empty() {
-        let raw = io.curl(&format!("{base_url}/api/algochat/messages?limit=10"));
+        let raw = io.curl(&format!("{base_url}/api/algochat/conversations"));
         if raw.is_empty() {
             io.output("  Server not reachable.\n");
             return;
         }
         match serde_json::from_str::<serde_json::Value>(&raw) {
             Ok(data) => {
-                let messages = data.as_array().or_else(|| {
-                    data.get("messages").and_then(|v| v.as_array())
+                let convos = data.as_array().or_else(|| {
+                    data.get("conversations").and_then(|v| v.as_array())
                 });
-                if let Some(msgs) = messages {
-                    io.output(&format!("\n  Recent AlgoChat Messages ({})\n\n", msgs.len()));
-                    for m in msgs {
-                        let from = m.get("from").and_then(|v| v.as_str()).unwrap_or("?");
-                        let text = m.get("text").and_then(|v| v.as_str())
-                            .or_else(|| m.get("content").and_then(|v| v.as_str()))
-                            .unwrap_or("");
-                        let truncated = if text.len() > 80 { &text[..80] } else { text };
-                        io.output(&format!("  [{from}] {truncated}\n"));
+                if let Some(convos) = convos {
+                    io.output(&format!("\n  AlgoChat Conversations ({})\n\n", convos.len()));
+                    for c in convos {
+                        let addr = c.get("participantAddr").and_then(|v| v.as_str()).unwrap_or("?");
+                        let short_addr = if addr.len() > 12 { &addr[..12] } else { addr };
+                        let created = c.get("createdAt").and_then(|v| v.as_str()).unwrap_or("?");
+                        io.output(&format!("  {short_addr}...  {created}\n"));
                     }
                     io.output("\n");
                 } else {
@@ -520,10 +541,10 @@ fn cmd_config(io: &mut PluginIO) {
     let resp = io.request(&OutboundMessage::Prompt {
         id: next_id(),
         message: "CorvidAgent server URL:".into(),
-        default: Some("http://localhost:3578".into()),
+        default: Some("http://localhost:3000".into()),
         validate: None,
     });
-    let url = resp.value.as_ref().and_then(|v| v.as_str()).unwrap_or("http://localhost:3578").to_string();
+    let url = resp.value.as_ref().and_then(|v| v.as_str()).unwrap_or("http://localhost:3000").to_string();
 
     io.send(&OutboundMessage::Store {
         key: "corvid_base_url".into(),
