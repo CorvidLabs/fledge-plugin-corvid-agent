@@ -1,0 +1,21 @@
+[project]
+name = "fledge-plugin-corvid-agent"
+language = "rust"
+
+[tasks]
+build = "cargo build --release"
+check = "cargo check"
+test = "cargo test"
+clippy = "cargo clippy -- -D warnings"
+fmt-check = "cargo fmt -- --check"
+
+[lanes.verify]
+description = "Full verification"
+steps = [
+  { parallel = ["check", "clippy", "fmt-check"] },
+  "test"
+]
+
+[lanes.release]
+description = "Build release binary"
+steps = ["verify", "build"]

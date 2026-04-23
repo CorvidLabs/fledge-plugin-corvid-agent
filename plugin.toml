@@ -1,0 +1,16 @@
+[plugin]
+name = "fledge-corvid-agent"
+version = "0.1.0"
+description = "Interact with a CorvidAgent server from the Fledge CLI"
+author = "CorvidLabs"
+protocol = "fledge-v1"
+
+[[commands]]
+name = "corvid-agent"
+description = "Manage CorvidAgent: health, agents, sessions, work tasks, chat"
+binary = "target/release/fledge-corvid-agent"
+
+[capabilities]
+exec = true
+store = true
+metadata = true
