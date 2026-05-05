@@ -222,7 +222,9 @@ impl PluginIO {
         let escaped = body.replace('\'', "'\\''");
         let resp = self.request(&OutboundMessage::Exec {
             id: next_id(),
-            command: format!("curl -s -X POST -H 'Content-Type: application/json' -d '{escaped}' '{url}'"),
+            command: format!(
+                "curl -s -X POST -H 'Content-Type: application/json' -d '{escaped}' '{url}'"
+            ),
             cwd: None,
             timeout: Some(30),
         });
@@ -275,7 +277,11 @@ fn parse_flags(args: &[String]) -> Flags {
         }
     }
 
-    Flags { yes, json, positional }
+    Flags {
+        yes,
+        json,
+        positional,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +335,10 @@ fn cmd_health(io: &mut PluginIO, base_url: &str, json_output: bool) {
 
     match serde_json::from_str::<serde_json::Value>(&raw) {
         Ok(health) => {
-            let status = health.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let status = health
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             let uptime = health.get("uptime").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let hours = (uptime / 3600.0) as u64;
             let mins = ((uptime % 3600.0) / 60.0) as u64;
@@ -372,16 +381,19 @@ fn cmd_agents(io: &mut PluginIO, base_url: &str, json_output: bool) {
 
     match serde_json::from_str::<serde_json::Value>(&raw) {
         Ok(data) => {
-            let agents = data.as_array().or_else(|| {
-                data.get("agents").and_then(|v| v.as_array())
-            });
+            let agents = data
+                .as_array()
+                .or_else(|| data.get("agents").and_then(|v| v.as_array()));
 
             if let Some(agents) = agents {
                 io.output(&format!("\n  Agents ({} total)\n\n", agents.len()));
                 for agent in agents {
                     let name = agent.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                     let model = agent.get("model").and_then(|v| v.as_str()).unwrap_or("?");
-                    let status = agent.get("status").and_then(|v| v.as_str()).unwrap_or("idle");
+                    let status = agent
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("idle");
                     io.output(&format!("  {name:<16} {model:<20} [{status}]\n"));
                 }
                 io.output("\n");
@@ -470,7 +482,7 @@ json.dump(out,sys.stdout)\""
             match serde_json::from_str::<serde_json::Value>(&raw) {
                 Ok(data) => {
                     if let Some(tasks) = data.as_array() {
-                        io.output(&format!("\n  Work Tasks (showing up to 20)\n\n"));
+                        io.output("\n  Work Tasks (showing up to 20)\n\n");
                         for t in tasks {
                             let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                             let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("?");
@@ -501,7 +513,11 @@ json.dump(out,sys.stdout)\""
                     default: None,
                     validate: Some("non_empty".into()),
                 });
-                resp.value.as_ref().and_then(|v| v.as_str()).unwrap_or("").to_string()
+                resp.value
+                    .as_ref()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
             };
 
             if desc.is_empty() {
@@ -513,11 +529,15 @@ json.dump(out,sys.stdout)\""
             let agent_names: Vec<String> = serde_json::from_str::<serde_json::Value>(&agents_raw)
                 .ok()
                 .and_then(|d| {
-                    d.as_array().or_else(|| d.get("agents").and_then(|v| v.as_array())).map(|arr| {
-                        arr.iter()
-                            .filter_map(|a| a.get("name").and_then(|v| v.as_str()).map(String::from))
-                            .collect()
-                    })
+                    d.as_array()
+                        .or_else(|| d.get("agents").and_then(|v| v.as_array()))
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|a| {
+                                    a.get("name").and_then(|v| v.as_str()).map(String::from)
+                                })
+                                .collect()
+                        })
                 })
                 .unwrap_or_default();
 
@@ -528,9 +548,16 @@ json.dump(out,sys.stdout)\""
 
             let agent = if let Some(a) = work_flags.agent {
                 if agent_names.iter().any(|n| n.eq_ignore_ascii_case(&a)) {
-                    agent_names.iter().find(|n| n.eq_ignore_ascii_case(&a)).unwrap().clone()
+                    agent_names
+                        .iter()
+                        .find(|n| n.eq_ignore_ascii_case(&a))
+                        .unwrap()
+                        .clone()
                 } else {
-                    io.output(&format!("  Unknown agent: {a}\n  Available: {}\n", agent_names.join(", ")));
+                    io.output(&format!(
+                        "  Unknown agent: {a}\n  Available: {}\n",
+                        agent_names.join(", ")
+                    ));
                     return;
                 }
             } else {
@@ -540,7 +567,11 @@ json.dump(out,sys.stdout)\""
                     options: agent_names.clone(),
                     default: Some(0),
                 });
-                resp.value.as_ref().and_then(|v| v.as_str()).unwrap_or(&agent_names[0]).to_string()
+                resp.value
+                    .as_ref()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&agent_names[0])
+                    .to_string()
             };
 
             let body = serde_json::json!({
@@ -569,14 +600,18 @@ json.dump(out,sys.stdout)\""
                     io.output(&format!("{result}\n"));
                 } else {
                     let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                    io.output(&format!("\n  Work task created: {id}\n  Agent: {agent}\n  Description: {desc}\n\n"));
+                    io.output(&format!(
+                        "\n  Work task created: {id}\n  Agent: {agent}\n  Description: {desc}\n\n"
+                    ));
                 }
             } else {
                 io.output(&format!("  Response: {result}\n"));
             }
         }
         _ => {
-            io.output(&format!("  Unknown work subcommand: {subcmd}\n  Usage: corvid-agent work [list|create]\n"));
+            io.output(&format!(
+                "  Unknown work subcommand: {subcmd}\n  Usage: corvid-agent work [list|create]\n"
+            ));
         }
     }
 }
@@ -605,7 +640,9 @@ fn parse_work_create_flags(args: &[String]) -> WorkCreateFlags {
                 desc_parts.push(args[i].clone());
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -637,20 +674,31 @@ fn cmd_chat(io: &mut PluginIO, base_url: &str, args: &[String], json_output: boo
 
         match serde_json::from_str::<serde_json::Value>(&raw) {
             Ok(data) => {
-                let conversations = data.as_array().or_else(|| {
-                    data.get("conversations").and_then(|v| v.as_array())
-                });
+                let conversations = data
+                    .as_array()
+                    .or_else(|| data.get("conversations").and_then(|v| v.as_array()));
                 if let Some(convos) = conversations {
-                    io.output(&format!("\n  AlgoChat Conversations ({})\n\n", convos.len()));
+                    io.output(&format!(
+                        "\n  AlgoChat Conversations ({})\n\n",
+                        convos.len()
+                    ));
                     for c in convos.iter().take(20) {
-                        let contact = c.get("contactName").and_then(|v| v.as_str())
+                        let contact = c
+                            .get("contactName")
+                            .and_then(|v| v.as_str())
                             .or_else(|| c.get("from").and_then(|v| v.as_str()))
                             .unwrap_or("?");
-                        let last_msg = c.get("lastMessage").and_then(|v| v.as_str())
+                        let last_msg = c
+                            .get("lastMessage")
+                            .and_then(|v| v.as_str())
                             .or_else(|| c.get("text").and_then(|v| v.as_str()))
                             .or_else(|| c.get("content").and_then(|v| v.as_str()))
                             .unwrap_or("");
-                        let truncated = if last_msg.len() > 60 { &last_msg[..60] } else { last_msg };
+                        let truncated = if last_msg.len() > 60 {
+                            &last_msg[..60]
+                        } else {
+                            last_msg
+                        };
                         io.output(&format!("  [{contact}] {truncated}\n"));
                     }
                     io.output("\n");
@@ -695,7 +743,9 @@ fn cmd_config(io: &mut PluginIO, args: &[String]) {
                 url = Some(args[i].clone());
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -708,7 +758,11 @@ fn cmd_config(io: &mut PluginIO, args: &[String]) {
             default: Some(DEFAULT_URL.into()),
             validate: None,
         });
-        resp.value.as_ref().and_then(|v| v.as_str()).unwrap_or(DEFAULT_URL).to_string()
+        resp.value
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .unwrap_or(DEFAULT_URL)
+            .to_string()
     };
 
     io.send(&OutboundMessage::Store {
@@ -726,7 +780,11 @@ fn cmd_restart(io: &mut PluginIO, base_url: &str, yes: bool) {
             message: "Restart the CorvidAgent server?".into(),
             default: Some(false),
         });
-        let confirmed = resp.value.as_ref().and_then(|v| v.as_bool()).unwrap_or(false);
+        let confirmed = resp
+            .value
+            .as_ref()
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if !confirmed {
             io.output("  Cancelled.\n");
             return;
@@ -779,7 +837,7 @@ fn show_help(io: &mut PluginIO) {
          fledge corvid-agent work create --agent Jackdaw \"Fix the login bug\"\n    \
          fledge corvid-agent chat Hello from Fledge!\n    \
          fledge corvid-agent restart --yes\n    \
-         fledge corvid-agent config --url http://localhost:3000\n\n"
+         fledge corvid-agent config --url http://localhost:3000\n\n",
     );
 }
 
@@ -793,7 +851,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let flags = parse_flags(&init.args);
 
-    let command = flags.positional.first().map(|s| s.as_str()).unwrap_or("help");
+    let command = flags
+        .positional
+        .first()
+        .map(|s| s.as_str())
+        .unwrap_or("help");
     let rest: Vec<String> = if flags.positional.len() > 1 {
         flags.positional[1..].to_vec()
     } else {
@@ -825,5 +887,433 @@ fn main() {
     if let Err(e) = run() {
         eprintln!("plugin error: {e}");
         std::process::exit(1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_flags tests ---
+
+    #[test]
+    fn test_parse_flags_empty() {
+        let flags = parse_flags(&[]);
+        assert!(!flags.yes);
+        assert!(!flags.json);
+        assert!(flags.positional.is_empty());
+    }
+
+    #[test]
+    fn test_parse_flags_yes_long() {
+        let args: Vec<String> = vec!["--yes".into(), "health".into()];
+        let flags = parse_flags(&args);
+        assert!(flags.yes);
+        assert!(!flags.json);
+        assert_eq!(flags.positional, vec!["health"]);
+    }
+
+    #[test]
+    fn test_parse_flags_yes_short() {
+        let args: Vec<String> = vec!["-y".into(), "restart".into()];
+        let flags = parse_flags(&args);
+        assert!(flags.yes);
+        assert_eq!(flags.positional, vec!["restart"]);
+    }
+
+    #[test]
+    fn test_parse_flags_json() {
+        let args: Vec<String> = vec!["health".into(), "--json".into()];
+        let flags = parse_flags(&args);
+        assert!(!flags.yes);
+        assert!(flags.json);
+        assert_eq!(flags.positional, vec!["health"]);
+    }
+
+    #[test]
+    fn test_parse_flags_combined() {
+        let args: Vec<String> = vec![
+            "--yes".into(),
+            "--json".into(),
+            "work".into(),
+            "list".into(),
+        ];
+        let flags = parse_flags(&args);
+        assert!(flags.yes);
+        assert!(flags.json);
+        assert_eq!(flags.positional, vec!["work", "list"]);
+    }
+
+    #[test]
+    fn test_parse_flags_positional_only() {
+        let args: Vec<String> = vec!["chat".into(), "hello".into(), "world".into()];
+        let flags = parse_flags(&args);
+        assert!(!flags.yes);
+        assert!(!flags.json);
+        assert_eq!(flags.positional, vec!["chat", "hello", "world"]);
+    }
+
+    // --- parse_work_create_flags tests ---
+
+    #[test]
+    fn test_work_create_flags_empty() {
+        let wf = parse_work_create_flags(&[]);
+        assert!(wf.agent.is_none());
+        assert!(wf.description.is_none());
+    }
+
+    #[test]
+    fn test_work_create_flags_with_agent_long() {
+        let args: Vec<String> = vec![
+            "--agent".into(),
+            "Jackdaw".into(),
+            "Fix".into(),
+            "the".into(),
+            "bug".into(),
+        ];
+        let wf = parse_work_create_flags(&args);
+        assert_eq!(wf.agent.as_deref(), Some("Jackdaw"));
+        assert_eq!(wf.description.as_deref(), Some("Fix the bug"));
+    }
+
+    #[test]
+    fn test_work_create_flags_with_agent_short() {
+        let args: Vec<String> = vec!["-a".into(), "Rook".into(), "Deploy".into()];
+        let wf = parse_work_create_flags(&args);
+        assert_eq!(wf.agent.as_deref(), Some("Rook"));
+        assert_eq!(wf.description.as_deref(), Some("Deploy"));
+    }
+
+    #[test]
+    fn test_work_create_flags_description_only() {
+        let args: Vec<String> = vec!["Run".into(), "the".into(), "migrations".into()];
+        let wf = parse_work_create_flags(&args);
+        assert!(wf.agent.is_none());
+        assert_eq!(wf.description.as_deref(), Some("Run the migrations"));
+    }
+
+    #[test]
+    fn test_work_create_flags_agent_at_end() {
+        let args: Vec<String> = vec![
+            "Do".into(),
+            "stuff".into(),
+            "--agent".into(),
+            "Magpie".into(),
+        ];
+        let wf = parse_work_create_flags(&args);
+        assert_eq!(wf.agent.as_deref(), Some("Magpie"));
+        assert_eq!(wf.description.as_deref(), Some("Do stuff"));
+    }
+
+    // --- DEFAULT_URL and URL construction tests ---
+
+    #[test]
+    fn test_default_url() {
+        assert_eq!(DEFAULT_URL, "http://localhost:3000");
+    }
+
+    #[test]
+    fn test_url_construction_health() {
+        let base = "http://myserver:4000";
+        let url = format!("{base}/api/health");
+        assert_eq!(url, "http://myserver:4000/api/health");
+    }
+
+    #[test]
+    fn test_url_construction_agents() {
+        let base = DEFAULT_URL;
+        let url = format!("{base}/api/agents");
+        assert_eq!(url, "http://localhost:3000/api/agents");
+    }
+
+    #[test]
+    fn test_url_construction_sessions() {
+        let base = DEFAULT_URL;
+        let url = format!("{base}/api/sessions");
+        assert_eq!(url, "http://localhost:3000/api/sessions");
+    }
+
+    #[test]
+    fn test_url_construction_work_tasks() {
+        let base = DEFAULT_URL;
+        let url = format!("{base}/api/work-tasks");
+        assert_eq!(url, "http://localhost:3000/api/work-tasks");
+    }
+
+    #[test]
+    fn test_url_construction_chat() {
+        let base = "https://prod.example.com";
+        let url = format!("{base}/api/algochat/conversations");
+        assert_eq!(url, "https://prod.example.com/api/algochat/conversations");
+    }
+
+    // --- Command routing tests ---
+
+    #[test]
+    fn test_command_routing_defaults_to_help() {
+        let flags = parse_flags(&[]);
+        let command = flags
+            .positional
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("help");
+        assert_eq!(command, "help");
+    }
+
+    #[test]
+    fn test_command_routing_health() {
+        let args: Vec<String> = vec!["health".into()];
+        let flags = parse_flags(&args);
+        let command = flags
+            .positional
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("help");
+        assert_eq!(command, "health");
+    }
+
+    #[test]
+    fn test_command_routing_status_alias() {
+        // "status" should route to the same handler as "health"
+        let args: Vec<String> = vec!["status".into()];
+        let flags = parse_flags(&args);
+        let command = flags
+            .positional
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("help");
+        assert!(command == "health" || command == "status");
+    }
+
+    #[test]
+    fn test_command_routing_work_subcommands() {
+        let args: Vec<String> = vec!["work".into(), "create".into()];
+        let flags = parse_flags(&args);
+        let command = flags
+            .positional
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("help");
+        let rest: Vec<String> = flags.positional[1..].to_vec();
+        assert_eq!(command, "work");
+        assert_eq!(rest, vec!["create"]);
+    }
+
+    // --- Outbound message serialization tests ---
+
+    #[test]
+    fn test_serialize_output() {
+        let msg = OutboundMessage::Output {
+            text: "hello".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(json, r#"{"type":"output","text":"hello"}"#);
+    }
+
+    #[test]
+    fn test_serialize_log() {
+        let msg = OutboundMessage::Log {
+            level: "info".into(),
+            message: "done".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(json, r#"{"type":"log","level":"info","message":"done"}"#);
+    }
+
+    #[test]
+    fn test_serialize_progress() {
+        let msg = OutboundMessage::Progress {
+            message: Some("Loading".into()),
+            current: None,
+            total: None,
+            done: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(json, r#"{"type":"progress","message":"Loading"}"#);
+    }
+
+    #[test]
+    fn test_serialize_progress_done() {
+        let msg = OutboundMessage::Progress {
+            message: None,
+            current: None,
+            total: None,
+            done: Some(true),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(json, r#"{"type":"progress","done":true}"#);
+    }
+
+    #[test]
+    fn test_serialize_store() {
+        let msg = OutboundMessage::Store {
+            key: "corvid_base_url".into(),
+            value: "http://x".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"store","key":"corvid_base_url","value":"http://x"}"#
+        );
+    }
+
+    #[test]
+    fn test_serialize_load() {
+        let msg = OutboundMessage::Load {
+            id: "1".into(),
+            key: "corvid_base_url".into(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert_eq!(json, r#"{"type":"load","id":"1","key":"corvid_base_url"}"#);
+    }
+
+    #[test]
+    fn test_serialize_exec() {
+        let msg = OutboundMessage::Exec {
+            id: "42".into(),
+            command: "curl -s http://x".into(),
+            cwd: None,
+            timeout: Some(30),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "exec");
+        assert_eq!(parsed["id"], "42");
+        assert_eq!(parsed["command"], "curl -s http://x");
+        assert_eq!(parsed["timeout"], 30);
+        assert!(parsed.get("cwd").is_none() || parsed["cwd"].is_null());
+    }
+
+    #[test]
+    fn test_serialize_prompt() {
+        let msg = OutboundMessage::Prompt {
+            id: "5".into(),
+            message: "Enter name:".into(),
+            default: Some("foo".into()),
+            validate: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "prompt");
+        assert_eq!(parsed["default"], "foo");
+        assert!(parsed.get("validate").is_none() || parsed["validate"].is_null());
+    }
+
+    #[test]
+    fn test_serialize_confirm() {
+        let msg = OutboundMessage::Confirm {
+            id: "7".into(),
+            message: "Are you sure?".into(),
+            default: Some(false),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "confirm");
+        assert_eq!(parsed["default"], false);
+    }
+
+    #[test]
+    fn test_serialize_select() {
+        let msg = OutboundMessage::Select {
+            id: "9".into(),
+            message: "Pick one:".into(),
+            options: vec!["a".into(), "b".into()],
+            default: Some(0),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["type"], "select");
+        assert_eq!(parsed["options"], serde_json::json!(["a", "b"]));
+        assert_eq!(parsed["default"], 0);
+    }
+
+    // --- Init message deserialization tests ---
+
+    #[test]
+    fn test_deserialize_init_message() {
+        let json = r#"{
+            "protocol": "fledge-v1",
+            "args": ["health", "--json"],
+            "project": {
+                "name": "my-project",
+                "root": "/home/user/proj",
+                "language": "rust",
+                "git": { "branch": "main", "dirty": false }
+            },
+            "plugin": {
+                "name": "fledge-corvid-agent",
+                "version": "0.1.0",
+                "dir": "/home/user/.fledge/plugins/corvid-agent"
+            },
+            "fledge": { "version": "0.10.0" }
+        }"#;
+        let init: InitMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(init.protocol, "fledge-v1");
+        assert_eq!(init.args, vec!["health", "--json"]);
+        assert_eq!(init.project.as_ref().unwrap().name, "my-project");
+        assert_eq!(
+            init.project.as_ref().unwrap().language.as_deref(),
+            Some("rust")
+        );
+        assert_eq!(
+            init.project.as_ref().unwrap().git.as_ref().unwrap().branch,
+            "main"
+        );
+        assert!(!init.project.as_ref().unwrap().git.as_ref().unwrap().dirty);
+        assert_eq!(init.plugin.name, "fledge-corvid-agent");
+        assert_eq!(init.fledge.version, "0.10.0");
+    }
+
+    #[test]
+    fn test_deserialize_init_message_minimal() {
+        let json = r#"{
+            "protocol": "fledge-v1",
+            "args": [],
+            "project": null,
+            "plugin": {
+                "name": "fledge-corvid-agent",
+                "version": "0.1.0",
+                "dir": "."
+            },
+            "fledge": { "version": "0.9.0" }
+        }"#;
+        let init: InitMessage = serde_json::from_str(json).unwrap();
+        assert!(init.project.is_none());
+        assert!(init.args.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_inbound_message_response() {
+        let json = r#"{"type": "response", "id": "1", "value": "http://custom:9000"}"#;
+        let msg: InboundMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.msg_type, "response");
+        assert_eq!(msg.id.as_deref(), Some("1"));
+        assert_eq!(
+            msg.value.as_ref().unwrap().as_str(),
+            Some("http://custom:9000")
+        );
+    }
+
+    #[test]
+    fn test_deserialize_inbound_message_cancel() {
+        let json = r#"{"type": "cancel", "reason": "user cancelled"}"#;
+        let msg: InboundMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.msg_type, "cancel");
+        assert_eq!(msg.reason.as_deref(), Some("user cancelled"));
+    }
+
+    // --- ID generation test ---
+
+    #[test]
+    fn test_next_id_increments() {
+        let a = next_id();
+        let b = next_id();
+        let a_num: u64 = a.parse().unwrap();
+        let b_num: u64 = b.parse().unwrap();
+        assert!(b_num > a_num);
     }
 }
